@@ -234,7 +234,8 @@
             // Erstelle Shape2D für Extrusion
             const shape2D = new THREE.Shape(positions.map(p => new THREE.Vector2(p.x, p.z)));
 
-            const height = parseFloat(el.tags.height) || (parseInt(el.tags["building:levels"]) || 2) * 3;
+            const baseHeight = parseFloat(el.tags['min_height']) || (parseInt(el.tags['building:min_level']) || 0) * 3;
+            const height = (parseFloat(el.tags.height) || (parseInt(el.tags["building:levels"]) || 2) * 3) - baseHeight;
             const color = '#c9c9c9';
 
             const extrudeSettings = { depth: height, bevelEnabled: false };
@@ -244,12 +245,28 @@
             const baseY = positions.reduce((sum, p) => sum + p.y, 0) / positions.length;
 
             const material = new THREE.MeshStandardMaterial({ color });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.rotation.x = -Math.PI / 2;
-            mesh.position.y = baseY;
+
+            const lod = new THREE.LOD();
+            
+            const meshHigh = new THREE.Mesh(geometry, material);
+            meshHigh.rotation.x = -Math.PI / 2;
+            meshHigh.position.y = baseY + baseHeight;
+            lod.addLevel(meshHigh, 0);
+
+            // Optional: niedrigere Auflösung oder simple Box als Ersatz
+            const lowGeom = new THREE.BoxGeometry(5, height, 5);
+            const lowMat = new THREE.MeshBasicMaterial({ color, wireframe: true });
+            const meshLow = new THREE.Mesh(lowGeom, lowMat);
+            const center = getWayCenter(el, nodes);
+            if (!center) continue;
+            const pos = latLonToXY(center.lat, center.lon, CENTER_LAT, CENTER_LON);
+            meshLow.position.set(pos.x, baseY + height / 2, pos.y);
+            lod.addLevel(meshLow, 250);
+
+            lod.position.set(0, 0, 0);
 
             const wrapper = document.createElement('a-entity');
-            wrapper.setObject3D('mesh', mesh);
+            wrapper.setObject3D('mesh', lod);
             scene.appendChild(wrapper);
         } else if (el.type === 'node') {
           if (el.tags?.natural === 'tree') await createFeatureFromTag(el, 'tree');
