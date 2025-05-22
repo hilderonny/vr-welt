@@ -12,10 +12,12 @@
 </head>
 <body>
   <a-scene>
-    <a-entity id="cameraRig" position="0 0 0">
+    <a-entity id="cameraRig" movement-controls position="0 0 0">
       <a-camera wasd-controls="acceleration: 20" look-controls></a-camera>
     </a-entity>
     <a-sky color="#88c"></a-sky>
+    <a-light type="directional" position="1 3 2" intensity="0.8"></a-light>
+    <a-light type="ambient" color="#ccc"></a-light>
   </a-scene>
 
   <script>
@@ -95,6 +97,13 @@
       scene.appendChild(box);
     }
 
+    async function createFeatureFromTag(el, type) {
+      if (type === 'tree') return createTree(el.lat, el.lon);
+      if (type === 'footway' || type === 'road' || type === 'tram') return createRoad(el.lat, el.lon, type);
+      if (type === 'park') return createPark(el.lat, el.lon);
+      if (type === 'bus_stop' || type === 'tram_stop') return createStop(el.lat, el.lon, type);
+    }
+
     async function createTree(lat, lon) {
       const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
       const elevation = await getElevation(lat, lon);
@@ -113,10 +122,34 @@
       scene.appendChild(crown);
     }
 
+    async function createPark(lat, lon) {
+      const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
+      const elevation = await getElevation(lat, lon);
+      const plane = document.createElement('a-plane');
+      plane.setAttribute('position', `${pos.x} ${elevation + 0.01} ${pos.y}`);
+      plane.setAttribute('rotation', '-90 0 0');
+      plane.setAttribute('width', 10);
+      plane.setAttribute('height', 10);
+      plane.setAttribute('color', '#5c9');
+      scene.appendChild(plane);
+    }
+
+    async function createStop(lat, lon, type) {
+      const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
+      const elevation = await getElevation(lat, lon);
+      const box = document.createElement('a-box');
+      box.setAttribute('position', `${pos.x} ${elevation + 1} ${pos.y}`);
+      box.setAttribute('depth', 0.5);
+      box.setAttribute('height', 0.5);
+      box.setAttribute('width', 0.5);
+      box.setAttribute('color', type === 'bus_stop' ? '#00f' : '#f80');
+      scene.appendChild(box);
+    }
+
     async function createRoad(lat, lon, type = 'road') {
       const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
       const elevation = await getElevation(lat, lon);
-      const color = type === 'footway' ? '#ccc' : '#333';
+      const color = type === 'footway' ? '#ccc' : type === 'tram' ? '#880' : '#333';
       const plane = document.createElement('a-plane');
       plane.setAttribute('position', `${pos.x} ${elevation + 0.01} ${pos.y}`);
       plane.setAttribute('rotation', `-90 0 0`);
@@ -127,22 +160,20 @@
     }
 
     async function generateTerrainMesh() {
-      const size = 1000; // 1 km
+      const size = 1000;
       const segments = 64;
       const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
-      const originLat = CENTER_LAT;
-      const originLon = CENTER_LON;
 
       for (let i = 0; i <= segments; i++) {
         for (let j = 0; j <= segments; j++) {
-          const lat = originLat + (i - segments / 2) * RADIUS_KM / 111 / segments;
-          const lon = originLon + (j - segments / 2) * RADIUS_KM / (111 * Math.cos(originLat * Math.PI / 180)) / segments;
+          const lat = CENTER_LAT + (i - segments / 2) * RADIUS_KM / 111 / segments;
+          const lon = CENTER_LON + (j - segments / 2) * RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)) / segments;
           const elevation = await getElevation(lat, lon);
           geometry.attributes.position.setZ(i * (segments + 1) + j, elevation);
         }
       }
-      geometry.computeVertexNormals();
 
+      geometry.computeVertexNormals();
       const material = new THREE.MeshStandardMaterial({ color: '#775533', flatShading: true });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.rotation.x = -Math.PI / 2;
@@ -159,19 +190,17 @@
       const lonMin = CENTER_LON - (RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)));
       const lonMax = CENTER_LON + (RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)));
 
-      const query = `[out:json][timeout:25];
-        (
-          way["building"](${latMin},${lonMin},${latMax},${lonMax});
-          node["natural"="tree"](${latMin},${lonMin},${latMax},${lonMax});
-          node["highway"="footway"](${latMin},${lonMin},${latMax},${lonMax});
-          node["highway"="residential"](${latMin},${lonMin},${latMax},${lonMax});
-        );
-        out body;
-        >;
-        out skel qt;`;
+      const query = `[out:json][timeout:25];(
+        way["building"](${latMin},${lonMin},${latMax},${lonMax});
+        node["natural"="tree"](${latMin},${lonMin},${latMax},${lonMax});
+        node["highway"="footway"](${latMin},${lonMin},${latMax},${lonMax});
+        node["highway"="residential"](${latMin},${lonMin},${latMax},${lonMax});
+        node["railway"="tram_stop"](${latMin},${lonMin},${latMax},${lonMax});
+        node["highway"="bus_stop"](${latMin},${lonMin},${latMax},${lonMax});
+        way["landuse"="grass"](${latMin},${lonMin},${latMax},${lonMax});
+      );out body;>;out skel qt;`;
 
-      const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-      const response = await fetch(url);
+      const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
       const data = await response.json();
 
       const nodes = {};
@@ -188,28 +217,72 @@
           const levels = parseInt(el.tags["building:levels"]) || 2;
           const color = el.tags["building:material"] === 'brick' ? '#b22222' : '#666';
           await createBox(center.lat, center.lon, levels * 3, 4, 4, color);
-        }
-
-        if (el.type === 'node' && el.tags && el.tags.natural === 'tree') {
-          await createTree(el.lat, el.lon);
-        }
-
-        if (el.type === 'node' && el.tags && el.tags.highway) {
-          const type = el.tags.highway === 'footway' ? 'footway' : 'road';
-          await createRoad(el.lat, el.lon, type);
+        } else if (el.type === 'node') {
+          if (el.tags?.natural === 'tree') await createFeatureFromTag(el, 'tree');
+          if (el.tags?.highway === 'footway') await createFeatureFromTag(el, 'footway');
+          if (el.tags?.highway === 'residential') await createFeatureFromTag(el, 'road');
+          if (el.tags?.railway === 'tram_stop') await createFeatureFromTag(el, 'tram_stop');
+          if (el.tags?.highway === 'bus_stop') await createFeatureFromTag(el, 'bus_stop');
+        } else if (el.type === 'way' && el.tags?.landuse === 'grass') {
+          const center = getWayCenter(el, nodes);
+          if (center) await createFeatureFromTag(center, 'park');
         }
       }
     }
 
     function getWayCenter(way, nodes) {
       const points = way.nodes.map(id => nodes[id]).filter(n => n);
-      if (points.length === 0) return null;
+      if (!points.length) return null;
       const lat = points.reduce((sum, n) => sum + n.lat, 0) / points.length;
       const lon = points.reduce((sum, n) => sum + n.lon, 0) / points.length;
       return { lat, lon };
     }
 
-    generateTerrainMesh().then(fetchOSMFeatures);
+    async function getInterpolatedElevation(lat, lon) {
+      const zoom = TILE_ZOOM;
+      const tile = deg2tile(lat, lon, zoom);
+      const sinLat = Math.sin(lat * Math.PI / 180);
+      const xFloat = ((lon + 180) / 360) * 256 * Math.pow(2, zoom) % 256;
+      const yFloat = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom) % 256;
+
+      const imageData = await loadTileImage(tile.x, tile.y, zoom);
+      if (!imageData) return 0;
+
+      const x0 = Math.floor(xFloat), y0 = Math.floor(yFloat);
+      const x1 = Math.min(x0 + 1, 255), y1 = Math.min(y0 + 1, 255);
+      const fx = xFloat - x0, fy = yFloat - y0;
+
+      function getElevationAt(x, y) {
+        const i = (y * 256 + x) * 4;
+        const [r, g, b] = imageData.data.slice(i, i + 3);
+        return (r * 256 + g + b / 256) - 32768;
+      }
+
+      const h00 = getElevationAt(x0, y0);
+      const h10 = getElevationAt(x1, y0);
+      const h01 = getElevationAt(x0, y1);
+      const h11 = getElevationAt(x1, y1);
+
+      const h0 = h00 * (1 - fx) + h10 * fx;
+      const h1 = h01 * (1 - fx) + h11 * fx;
+      return h0 * (1 - fy) + h1 * fy;
+    }
+
+    (async () => {
+      await generateTerrainMesh();
+      await fetchOSMFeatures();
+
+      // Terrainhöhen-Anpassung der Kamera mit Interpolation
+      const cam = document.getElementById('cameraRig');
+      const updateCamHeight = async () => {
+        const pos = cam.object3D.position;
+        const lat = CENTER_LAT + pos.z / 111000;
+        const lon = CENTER_LON + pos.x / (111000 * Math.cos(CENTER_LAT * Math.PI / 180));
+        const elev = await getInterpolatedElevation(lat, lon);
+        cam.setAttribute('position', `${pos.x} ${elev + 1.6} ${pos.z}`);
+      };
+      setInterval(updateCamHeight, 200);
+    })();
   </script>
 </body>
 </html>
