@@ -212,11 +212,45 @@
 
       for (const el of data.elements) {
         if (el.type === 'way' && el.tags && el.tags.building) {
-          const center = getWayCenter(el, nodes);
-          if (!center) continue;
-          const levels = parseInt(el.tags["building:levels"]) || 2;
-          const color = el.tags["building:material"] === 'brick' ? '#b22222' : '#666';
-          await createBox(center.lat, center.lon, levels * 3, 4, 4, color);
+            //   const center = getWayCenter(el, nodes);
+            //   if (!center) continue;
+            //   const levels = parseInt(el.tags["building:levels"]) || 2;
+            //   const color = el.tags["building:material"] === 'brick' ? '#b22222' : '#666';
+            //   await createBox(center.lat, center.lon, levels * 3, 4, 4, color);
+            const shapeNodes = el.nodes.map(id => nodes[id]).filter(n => n);
+            if (shapeNodes.length < 3) continue;
+
+            const positions = await Promise.all(shapeNodes.map(async n => {
+                const elev = await getInterpolatedElevation(n.lat, n.lon);
+                const { x, y } = latLonToXY(n.lat, n.lon, CENTER_LAT, CENTER_LON);
+                return new THREE.Vector3(x, elev, -y);
+            }));
+
+            // Form schließen, falls nötig
+            if (!positions[0].equals(positions[positions.length - 1])) {
+                positions.push(positions[0]);
+            }
+
+            // Erstelle Shape2D für Extrusion
+            const shape2D = new THREE.Shape(positions.map(p => new THREE.Vector2(p.x, p.z)));
+
+            const height = parseFloat(el.tags.height) || (parseInt(el.tags["building:levels"]) || 2) * 3;
+            const color = '#c9c9c9';
+
+            const extrudeSettings = { depth: height, bevelEnabled: false };
+            const geometry = new THREE.ExtrudeGeometry(shape2D, extrudeSettings);
+
+            // Setze Y-Position (Basis) anhand mittlerer Höhe der Punkte
+            const baseY = positions.reduce((sum, p) => sum + p.y, 0) / positions.length;
+
+            const material = new THREE.MeshStandardMaterial({ color });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.y = baseY;
+
+            const wrapper = document.createElement('a-entity');
+            wrapper.setObject3D('mesh', mesh);
+            scene.appendChild(wrapper);
         } else if (el.type === 'node') {
           if (el.tags?.natural === 'tree') await createFeatureFromTag(el, 'tree');
           if (el.tags?.highway === 'footway') await createFeatureFromTag(el, 'footway');
