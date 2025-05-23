@@ -4,336 +4,346 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OSM + A-Frame VR Viewer</title>
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+  <script src="./js/aframe.1.7.1.min.js"></script>
+  <script src="./js/proj4.2.15.0.min.js"></script>
+  <script type="module" src="./js/main.mjs"></script>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; }
   </style>
 </head>
 <body>
   <a-scene>
-    <a-entity id="cameraRig" movement-controls position="0 0 0">
-      <a-camera wasd-controls="acceleration: 20" look-controls></a-camera>
+    <a-entity id="cameraRig" movement-controls>
+      <a-camera look-controls wasd-controls="fly: true;"></a-camera>
     </a-entity>
     <a-sky color="#88c"></a-sky>
     <a-light type="directional" position="1 3 2" intensity="0.8"></a-light>
     <a-light type="ambient" color="#ccc"></a-light>
+
+    <a-entity id="street-container"></a-entity>
+
   </a-scene>
 
   <script>
-    const CENTER_LAT = 50.990594;
-    const CENTER_LON = 11.062017;
-    const RADIUS_KM = 1.0;
-    const TILE_ZOOM = 14;
+    // const CENTER_LAT = 50.990594;
+    // const CENTER_LON = 11.062017;
+    // const RADIUS_KM = 0.3;
+    // const TILE_ZOOM = 14;
 
-    const scene = document.querySelector('a-scene');
-    const elevationTileCache = new Map();
+    // const scene = document.querySelector('a-scene');
+    // const elevationTileCache = new Map();
 
-    function latLonToXY(lat, lon, originLat, originLon) {
-      const R = 6371000;
-      const x = (lon - originLon) * Math.cos((lat + originLat) / 2 * Math.PI / 180) * (Math.PI / 180) * R;
-      const y = (lat - originLat) * (Math.PI / 180) * R;
-      return { x, y };
-    }
+    // function latLonToXY(lat, lon, originLat, originLon) {
+    //   const R = 6371000;
+    //   const x = (lon - originLon) * Math.cos((lat + originLat) / 2 * Math.PI / 180) * (Math.PI / 180) * R;
+    //   const y = (lat - originLat) * (Math.PI / 180) * R;
+    //   return { x, y };
+    // }
 
-    function deg2tile(lat, lon, zoom) {
-      const latRad = lat * Math.PI / 180;
-      const n = Math.pow(2, zoom);
-      const xtile = Math.floor((lon + 180) / 360 * n);
-      const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-      return { x: xtile, y: ytile };
-    }
+    // // function deg2tile(lat, lon, zoom) {
+    // //   const latRad = lat * Math.PI / 180;
+    // //   const n = Math.pow(2, zoom);
+    // //   const xtile = Math.floor((lon + 180) / 360 * n);
+    // //   const ytile = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+    // //   return { x: xtile, y: ytile };
+    // // }
 
-    async function loadTileImage(x, y, zoom) {
-      const key = `${zoom}/${x}/${y}`;
-      if (elevationTileCache.has(key)) return elevationTileCache.get(key);
+    // // async function loadTileImage(x, y, zoom) {
+    // //   const key = `${zoom}/${x}/${y}`;
+    // //   if (elevationTileCache.has(key)) return elevationTileCache.get(key);
 
-      const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${x}/${y}.png`;
-      const img = new Image();
-      img.crossOrigin = "Anonymous";
-      const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext('2d');
+    // //   const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${x}/${y}.png`;
+    // //   const img = new Image();
+    // //   img.crossOrigin = "Anonymous";
+    // //   const canvas = document.createElement('canvas');
+    // //   canvas.width = 256;
+    // //   canvas.height = 256;
+    // //   const ctx = canvas.getContext('2d');
 
-      const promise = new Promise((resolve, reject) => {
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-          resolve(ctx.getImageData(0, 0, 256, 256));
-        };
-        img.onerror = () => resolve(null);
-        img.src = url;
-      });
+    // //   const promise = new Promise((resolve, reject) => {
+    // //     img.onload = () => {
+    // //       ctx.drawImage(img, 0, 0);
+    // //       resolve(ctx.getImageData(0, 0, 256, 256));
+    // //     };
+    // //     img.onerror = () => resolve(null);
+    // //     img.src = url;
+    // //   });
 
-      elevationTileCache.set(key, promise);
-      return promise;
-    }
+    // //   elevationTileCache.set(key, promise);
+    // //   return promise;
+    // // }
 
-    async function getElevation(lat, lon) {
-      const zoom = TILE_ZOOM;
-      const tile = deg2tile(lat, lon, zoom);
-      const sinLat = Math.sin(lat * Math.PI / 180);
-      const xPixel = ((lon + 180) / 360) * 256 * Math.pow(2, zoom) % 256;
-      const yPixel = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom) % 256;
+    // // async function getElevation(lat, lon) {
+    // //   const zoom = TILE_ZOOM;
+    // //   const tile = deg2tile(lat, lon, zoom);
+    // //   const sinLat = Math.sin(lat * Math.PI / 180);
+    // //   const xPixel = ((lon + 180) / 360) * 256 * Math.pow(2, zoom) % 256;
+    // //   const yPixel = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom) % 256;
 
-      const imageData = await loadTileImage(tile.x, tile.y, zoom);
-      if (!imageData) return 0;
-      const px = Math.floor(xPixel);
-      const py = Math.floor(yPixel);
-      const i = (py * 256 + px) * 4;
-      const [r, g, b] = imageData.data.slice(i, i + 3);
-      return (r * 256 + g + b / 256) - 32768;
-    }
+    // //   const imageData = await loadTileImage(tile.x, tile.y, zoom);
+    // //   if (!imageData) return 0;
+    // //   const px = Math.floor(xPixel);
+    // //   const py = Math.floor(yPixel);
+    // //   const i = (py * 256 + px) * 4;
+    // //   const [r, g, b] = imageData.data.slice(i, i + 3);
+    // //   return (r * 256 + g + b / 256) - 32768;
+    // // }
 
-    async function createBox(lat, lon, height = 2, width = 4, depth = 4, color = '#666') {
-      const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
-      const elevation = await getElevation(lat, lon);
-      const box = document.createElement('a-box');
-      box.setAttribute('position', `${pos.x} ${elevation + height / 2} ${pos.y}`);
-      box.setAttribute('height', height);
-      box.setAttribute('width', width);
-      box.setAttribute('depth', depth);
-      box.setAttribute('color', color);
-      scene.appendChild(box);
-    }
+    // async function createBox(lat, lon, height = 2, width = 4, depth = 4, color = '#666') {
+    //   const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
+    //   const elevation = 0 //await getElevation(lat, lon);
+    //   const box = document.createElement('a-box');
+    //   box.setAttribute('position', `${pos.x} ${elevation + height / 2} ${pos.y}`);
+    //   box.setAttribute('height', height);
+    //   box.setAttribute('width', width);
+    //   box.setAttribute('depth', depth);
+    //   box.setAttribute('color', color);
+    //   scene.appendChild(box);
+    // }
 
-    async function createFeatureFromTag(el, type) {
-      if (type === 'tree') return createTree(el.lat, el.lon);
-      if (type === 'footway' || type === 'road' || type === 'tram') return createRoad(el.lat, el.lon, type);
-      if (type === 'park') return createPark(el.lat, el.lon);
-      if (type === 'bus_stop' || type === 'tram_stop') return createStop(el.lat, el.lon, type);
-    }
+    // async function createFeatureFromTag(el, type) {
+    //   console.log(el)
+    //   if (type === 'tree') return createTree(el.lat, el.lon);
+    //   if (type === 'footway' || type === 'road' || type === 'tram') return createRoad(el.lat, el.lon, type);
+    //   if (type === 'park') return createPark(el.lat, el.lon);
+    //   if (type === 'bus_stop' || type === 'tram_stop') return createStop(el.lat, el.lon, type);
+    // }
 
-    async function createTree(lat, lon) {
-      const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
-      const elevation = await getElevation(lat, lon);
+    // async function createTree(lat, lon) {
+    //   const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
+    //   const elevation = 0 //await getElevation(lat, lon);
 
-      const trunk = document.createElement('a-cylinder');
-      trunk.setAttribute('position', `${pos.x} ${elevation + 0.5} ${pos.y}`);
-      trunk.setAttribute('height', 1);
-      trunk.setAttribute('radius', 0.1);
-      trunk.setAttribute('color', '#8B4513');
-      scene.appendChild(trunk);
+    //   const trunk = document.createElement('a-cylinder');
+    //   trunk.setAttribute('position', `${pos.x} ${elevation + 0.5} ${pos.y}`);
+    //   trunk.setAttribute('height', 1);
+    //   trunk.setAttribute('radius', 0.1);
+    //   trunk.setAttribute('color', '#8B4513');
+    //   scene.appendChild(trunk);
 
-      const crown = document.createElement('a-sphere');
-      crown.setAttribute('position', `${pos.x} ${elevation + 1.5} ${pos.y}`);
-      crown.setAttribute('radius', 0.7);
-      crown.setAttribute('color', 'green');
-      scene.appendChild(crown);
-    }
+    //   const crown = document.createElement('a-sphere');
+    //   crown.setAttribute('position', `${pos.x} ${elevation + 1.5} ${pos.y}`);
+    //   crown.setAttribute('radius', 0.7);
+    //   crown.setAttribute('color', 'green');
+    //   scene.appendChild(crown);
+    // }
 
-    async function createPark(lat, lon) {
-      const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
-      const elevation = await getElevation(lat, lon);
-      const plane = document.createElement('a-plane');
-      plane.setAttribute('position', `${pos.x} ${elevation + 0.01} ${pos.y}`);
-      plane.setAttribute('rotation', '-90 0 0');
-      plane.setAttribute('width', 10);
-      plane.setAttribute('height', 10);
-      plane.setAttribute('color', '#5c9');
-      scene.appendChild(plane);
-    }
+    // async function createPark(lat, lon) {
+    //   const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
+    //   const elevation = 0 //await getElevation(lat, lon);
+    //   const plane = document.createElement('a-plane');
+    //   plane.setAttribute('position', `${pos.x} ${elevation + 0.01} ${pos.y}`);
+    //   plane.setAttribute('rotation', '-90 0 0');
+    //   plane.setAttribute('width', 10);
+    //   plane.setAttribute('height', 10);
+    //   plane.setAttribute('color', '#5c9');
+    //   scene.appendChild(plane);
+    // }
 
-    async function createStop(lat, lon, type) {
-      const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
-      const elevation = await getElevation(lat, lon);
-      const box = document.createElement('a-box');
-      box.setAttribute('position', `${pos.x} ${elevation + 1} ${pos.y}`);
-      box.setAttribute('depth', 0.5);
-      box.setAttribute('height', 0.5);
-      box.setAttribute('width', 0.5);
-      box.setAttribute('color', type === 'bus_stop' ? '#00f' : '#f80');
-      scene.appendChild(box);
-    }
+    // async function createStop(lat, lon, type) {
+    //   const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
+    //   const elevation = 0 //await getElevation(lat, lon);
+    //   const box = document.createElement('a-box');
+    //   box.setAttribute('position', `${pos.x} ${elevation + 1} ${pos.y}`);
+    //   box.setAttribute('depth', 0.5);
+    //   box.setAttribute('height', 0.5);
+    //   box.setAttribute('width', 0.5);
+    //   box.setAttribute('color', type === 'bus_stop' ? '#00f' : '#f80');
+    //   scene.appendChild(box);
+    // }
 
-    async function createRoad(lat, lon, type = 'road') {
-      const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
-      const elevation = await getElevation(lat, lon);
-      const color = type === 'footway' ? '#ccc' : type === 'tram' ? '#880' : '#333';
-      const plane = document.createElement('a-plane');
-      plane.setAttribute('position', `${pos.x} ${elevation + 0.01} ${pos.y}`);
-      plane.setAttribute('rotation', `-90 0 0`);
-      plane.setAttribute('width', 2);
-      plane.setAttribute('height', 2);
-      plane.setAttribute('color', color);
-      scene.appendChild(plane);
-    }
+    // async function createRoad(lat, lon, type = 'road') {
+    //   console.log(lat, lon, type)
+    //   const pos = latLonToXY(lat, lon, CENTER_LAT, CENTER_LON);
+    //   const elevation = 0 //await getElevation(lat, lon);
+    //   const color = type === 'footway' ? '#ccc' : type === 'tram' ? '#880' : '#333';
+    //   const plane = document.createElement('a-plane');
+    //   plane.setAttribute('position', `${pos.x} ${elevation + 0.01} ${pos.y}`);
+    //   plane.setAttribute('rotation', `-90 0 0`);
+    //   plane.setAttribute('width', 2);
+    //   plane.setAttribute('height', 2);
+    //   plane.setAttribute('color', color);
+    //   scene.appendChild(plane);
+    // }
 
-    async function generateTerrainMesh() {
-      const size = 1000;
-      const segments = 64;
-      const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
+    // // async function generateTerrainMesh() {
+    // //   const size = 1000;
+    // //   const segments = 64;
+    // //   const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
 
-      for (let i = 0; i <= segments; i++) {
-        for (let j = 0; j <= segments; j++) {
-          const lat = CENTER_LAT + (i - segments / 2) * RADIUS_KM / 111 / segments;
-          const lon = CENTER_LON + (j - segments / 2) * RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)) / segments;
-          const elevation = await getElevation(lat, lon);
-          geometry.attributes.position.setZ(i * (segments + 1) + j, elevation);
-        }
-      }
+    // //   for (let i = 0; i <= segments; i++) {
+    // //     for (let j = 0; j <= segments; j++) {
+    // //       const lat = CENTER_LAT + (i - segments / 2) * RADIUS_KM / 111 / segments;
+    // //       const lon = CENTER_LON + (j - segments / 2) * RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)) / segments;
+    // //       const elevation = await getElevation(lat, lon);
+    // //       geometry.attributes.position.setZ(i * (segments + 1) + j, elevation);
+    // //     }
+    // //   }
 
-      geometry.computeVertexNormals();
-      const material = new THREE.MeshStandardMaterial({ color: '#775533', flatShading: true });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.rotation.x = -Math.PI / 2;
-      scene.object3D.add(mesh);
+    // //   geometry.computeVertexNormals();
+    // //   const material = new THREE.MeshStandardMaterial({ color: '#775533', flatShading: true });
+    // //   const mesh = new THREE.Mesh(geometry, material);
+    // //   mesh.rotation.x = -Math.PI / 2;
+    // //   scene.object3D.add(mesh);
 
-      // Kamera auf Gelände platzieren
-      const cam = document.getElementById('cameraRig');
-      cam.setAttribute('position', `0 ${geometry.attributes.position.getZ((segments / 2) * (segments + 1) + (segments / 2)) + 1.6} 0`);
-    }
+    // //   // Kamera auf Gelände platzieren
+    // //   const cam = document.getElementById('cameraRig');
+    // //   cam.setAttribute('position', `0 ${geometry.attributes.position.getZ((segments / 2) * (segments + 1) + (segments / 2)) + 1.6} 0`);
+    // // }
 
-    async function fetchOSMFeatures() {
-      const latMin = CENTER_LAT - (RADIUS_KM / 111);
-      const latMax = CENTER_LAT + (RADIUS_KM / 111);
-      const lonMin = CENTER_LON - (RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)));
-      const lonMax = CENTER_LON + (RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)));
+    // async function fetchOSMFeatures() {
+    //   const latMin = CENTER_LAT - (RADIUS_KM / 111);
+    //   const latMax = CENTER_LAT + (RADIUS_KM / 111);
+    //   const lonMin = CENTER_LON - (RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)));
+    //   const lonMax = CENTER_LON + (RADIUS_KM / (111 * Math.cos(CENTER_LAT * Math.PI / 180)));
 
-      const query = `[out:json][timeout:25];(
-        way["building"](${latMin},${lonMin},${latMax},${lonMax});
-        node["natural"="tree"](${latMin},${lonMin},${latMax},${lonMax});
-        node["highway"="footway"](${latMin},${lonMin},${latMax},${lonMax});
-        node["highway"="residential"](${latMin},${lonMin},${latMax},${lonMax});
-        node["railway"="tram_stop"](${latMin},${lonMin},${latMax},${lonMax});
-        node["highway"="bus_stop"](${latMin},${lonMin},${latMax},${lonMax});
-        way["landuse"="grass"](${latMin},${lonMin},${latMax},${lonMax});
-      );out body;>;out skel qt;`;
+    //   const query = `[out:json][timeout:25];(
+    //     way(${latMin},${lonMin},${latMax},${lonMax});
+    //     node["natural"="tree"](${latMin},${lonMin},${latMax},${lonMax});
+    //     node["highway"="footway"](${latMin},${lonMin},${latMax},${lonMax});
+    //     node["highway"="residential"](${latMin},${lonMin},${latMax},${lonMax});
+    //     node["railway"="tram_stop"](${latMin},${lonMin},${latMax},${lonMax});
+    //     node["highway"="bus_stop"](${latMin},${lonMin},${latMax},${lonMax});
+    //     way["landuse"="grass"](${latMin},${lonMin},${latMax},${lonMax});
+    //   );out body;>;out skel qt;`;
 
-      const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-      const data = await response.json();
+    //   const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+    //   const data = await response.json();
 
-      const nodes = {};
-      for (const el of data.elements) {
-        if (el.type === 'node') {
-          nodes[el.id] = el;
-        }
-      }
+    //   // console.log(data)
 
-      for (const el of data.elements) {
-        if (el.type === 'way' && el.tags && el.tags.building) {
-            //   const center = getWayCenter(el, nodes);
-            //   if (!center) continue;
-            //   const levels = parseInt(el.tags["building:levels"]) || 2;
-            //   const color = el.tags["building:material"] === 'brick' ? '#b22222' : '#666';
-            //   await createBox(center.lat, center.lon, levels * 3, 4, 4, color);
-            const shapeNodes = el.nodes.map(id => nodes[id]).filter(n => n);
-            if (shapeNodes.length < 3) continue;
+    //   const nodes = {};
+    //   for (const el of data.elements) {
+    //     if (el.type === 'node') {
+    //       nodes[el.id] = el;
+    //     }
+    //   }
 
-            const positions = await Promise.all(shapeNodes.map(async n => {
-                const elev = await getInterpolatedElevation(n.lat, n.lon);
-                const { x, y } = latLonToXY(n.lat, n.lon, CENTER_LAT, CENTER_LON);
-                return new THREE.Vector3(x, elev, -y);
-            }));
+    //   for (const el of data.elements) {
+    //     if (el.type === 'way') {
+    //       // console.log(el.type, el.tags)
+    //       if (el.tags?.building) {
+    //         //   const center = getWayCenter(el, nodes);
+    //         //   if (!center) continue;
+    //         //   const levels = parseInt(el.tags["building:levels"]) || 2;
+    //         //   const color = el.tags["building:material"] === 'brick' ? '#b22222' : '#666';
+    //         //   await createBox(center.lat, center.lon, levels * 3, 4, 4, color);
+    //         const shapeNodes = el.nodes.map(id => nodes[id]).filter(n => n);
+    //         if (shapeNodes.length < 3) continue;
 
-            // Form schließen, falls nötig
-            if (!positions[0].equals(positions[positions.length - 1])) {
-                positions.push(positions[0]);
-            }
+    //         const positions = await Promise.all(shapeNodes.map(async n => {
+    //             const elev = 0//await getInterpolatedElevation(n.lat, n.lon);
+    //             const { x, y } = latLonToXY(n.lat, n.lon, CENTER_LAT, CENTER_LON);
+    //             return new THREE.Vector3(x, elev, -y);
+    //         }));
 
-            // Erstelle Shape2D für Extrusion
-            const shape2D = new THREE.Shape(positions.map(p => new THREE.Vector2(p.x, p.z)));
+    //         // Form schließen, falls nötig
+    //         if (!positions[0].equals(positions[positions.length - 1])) {
+    //             positions.push(positions[0]);
+    //         }
 
-            const baseHeight = parseFloat(el.tags['min_height']) || (parseInt(el.tags['building:min_level']) || 0) * 3;
-            const height = (parseFloat(el.tags.height) || (parseInt(el.tags["building:levels"]) || 2) * 3) - baseHeight;
-            const color = '#c9c9c9';
+    //         // Erstelle Shape2D für Extrusion
+    //         const shape2D = new THREE.Shape(positions.map(p => new THREE.Vector2(p.x, p.z)));
 
-            const extrudeSettings = { depth: height, bevelEnabled: false };
-            const geometry = new THREE.ExtrudeGeometry(shape2D, extrudeSettings);
+    //         const baseHeight = parseFloat(el.tags['min_height']) || (parseInt(el.tags['building:min_level']) || 0) * 3;
+    //         const height = (parseFloat(el.tags.height) || (parseInt(el.tags["building:levels"]) || 2) * 3) - baseHeight;
+    //         const color = '#c9c9c9';
 
-            // Setze Y-Position (Basis) anhand mittlerer Höhe der Punkte
-            const baseY = positions.reduce((sum, p) => sum + p.y, 0) / positions.length;
+    //         const extrudeSettings = { depth: height, bevelEnabled: false };
+    //         const geometry = new THREE.ExtrudeGeometry(shape2D, extrudeSettings);
 
-            const material = new THREE.MeshStandardMaterial({ color });
+    //         // Setze Y-Position (Basis) anhand mittlerer Höhe der Punkte
+    //         const baseY = positions.reduce((sum, p) => sum + p.y, 0) / positions.length;
 
-            const lod = new THREE.LOD();
+    //         const material = new THREE.MeshStandardMaterial({ color });
+
+    //         const lod = new THREE.LOD();
             
-            const meshHigh = new THREE.Mesh(geometry, material);
-            meshHigh.rotation.x = -Math.PI / 2;
-            meshHigh.position.y = baseY + baseHeight;
-            lod.addLevel(meshHigh, 0);
+    //         const meshHigh = new THREE.Mesh(geometry, material);
+    //         meshHigh.rotation.x = -Math.PI / 2;
+    //         meshHigh.position.y = baseY + baseHeight;
+    //         lod.addLevel(meshHigh, 0);
 
-            // Optional: niedrigere Auflösung oder simple Box als Ersatz
-            const lowGeom = new THREE.BoxGeometry(5, height, 5);
-            const lowMat = new THREE.MeshBasicMaterial({ color, wireframe: true });
-            const meshLow = new THREE.Mesh(lowGeom, lowMat);
-            const center = getWayCenter(el, nodes);
-            if (!center) continue;
-            const pos = latLonToXY(center.lat, center.lon, CENTER_LAT, CENTER_LON);
-            meshLow.position.set(pos.x, baseY + height / 2, pos.y);
-            lod.addLevel(meshLow, 250);
+    //         // Optional: niedrigere Auflösung oder simple Box als Ersatz
+    //         const lowGeom = new THREE.BoxGeometry(5, height, 5);
+    //         const lowMat = new THREE.MeshBasicMaterial({ color, wireframe: true });
+    //         const meshLow = new THREE.Mesh(lowGeom, lowMat);
+    //         const center = getWayCenter(el, nodes);
+    //         if (!center) continue;
+    //         const pos = latLonToXY(center.lat, center.lon, CENTER_LAT, CENTER_LON);
+    //         meshLow.position.set(pos.x, baseY + height / 2, pos.y);
+    //         lod.addLevel(meshLow, 250);
 
-            lod.position.set(0, 0, 0);
+    //         lod.position.set(0, 0, 0);
 
-            const wrapper = document.createElement('a-entity');
-            wrapper.setObject3D('mesh', lod);
-            scene.appendChild(wrapper);
-        } else if (el.type === 'node') {
-          if (el.tags?.natural === 'tree') await createFeatureFromTag(el, 'tree');
-          if (el.tags?.highway === 'footway') await createFeatureFromTag(el, 'footway');
-          if (el.tags?.highway === 'residential') await createFeatureFromTag(el, 'road');
-          if (el.tags?.railway === 'tram_stop') await createFeatureFromTag(el, 'tram_stop');
-          if (el.tags?.highway === 'bus_stop') await createFeatureFromTag(el, 'bus_stop');
-        } else if (el.type === 'way' && el.tags?.landuse === 'grass') {
-          const center = getWayCenter(el, nodes);
-          if (center) await createFeatureFromTag(center, 'park');
-        }
-      }
-    }
+    //         const wrapper = document.createElement('a-entity');
+    //         wrapper.setObject3D('mesh', lod);
+    //         scene.appendChild(wrapper);
+    //       } else {
+    //         if (el.tags?.highway === 'footway') await createFeatureFromTag(el, 'footway');
+    //         if (el.tags?.highway === 'residential') await createFeatureFromTag(el, 'road');
+    //         if (el.tags?.landuse === 'grass') createFeatureFromTag(getWayCenter(el, nodes), 'park');
+    //       }
+    //     } else if (el.type === 'node') {
+    //       if (el.tags?.natural === 'tree') await createFeatureFromTag(el, 'tree');
+    //       if (el.tags?.railway === 'tram_stop') await createFeatureFromTag(el, 'tram_stop');
+    //       if (el.tags?.highway === 'bus_stop') await createFeatureFromTag(el, 'bus_stop');
+    //     }
+    //   }
+    // }
 
-    function getWayCenter(way, nodes) {
-      const points = way.nodes.map(id => nodes[id]).filter(n => n);
-      if (!points.length) return null;
-      const lat = points.reduce((sum, n) => sum + n.lat, 0) / points.length;
-      const lon = points.reduce((sum, n) => sum + n.lon, 0) / points.length;
-      return { lat, lon };
-    }
+    // function getWayCenter(way, nodes) {
+    //   const points = way.nodes.map(id => nodes[id]).filter(n => n);
+    //   if (!points.length) return null;
+    //   const lat = points.reduce((sum, n) => sum + n.lat, 0) / points.length;
+    //   const lon = points.reduce((sum, n) => sum + n.lon, 0) / points.length;
+    //   return { lat, lon };
+    // }
 
-    async function getInterpolatedElevation(lat, lon) {
-      const zoom = TILE_ZOOM;
-      const tile = deg2tile(lat, lon, zoom);
-      const sinLat = Math.sin(lat * Math.PI / 180);
-      const xFloat = ((lon + 180) / 360) * 256 * Math.pow(2, zoom) % 256;
-      const yFloat = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom) % 256;
+    // // async function getInterpolatedElevation(lat, lon) {
+    // //   const zoom = TILE_ZOOM;
+    // //   const tile = deg2tile(lat, lon, zoom);
+    // //   const sinLat = Math.sin(lat * Math.PI / 180);
+    // //   const xFloat = ((lon + 180) / 360) * 256 * Math.pow(2, zoom) % 256;
+    // //   const yFloat = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom) % 256;
 
-      const imageData = await loadTileImage(tile.x, tile.y, zoom);
-      if (!imageData) return 0;
+    // //   const imageData = await loadTileImage(tile.x, tile.y, zoom);
+    // //   if (!imageData) return 0;
 
-      const x0 = Math.floor(xFloat), y0 = Math.floor(yFloat);
-      const x1 = Math.min(x0 + 1, 255), y1 = Math.min(y0 + 1, 255);
-      const fx = xFloat - x0, fy = yFloat - y0;
+    // //   const x0 = Math.floor(xFloat), y0 = Math.floor(yFloat);
+    // //   const x1 = Math.min(x0 + 1, 255), y1 = Math.min(y0 + 1, 255);
+    // //   const fx = xFloat - x0, fy = yFloat - y0;
 
-      function getElevationAt(x, y) {
-        const i = (y * 256 + x) * 4;
-        const [r, g, b] = imageData.data.slice(i, i + 3);
-        return (r * 256 + g + b / 256) - 32768;
-      }
+    // //   function getElevationAt(x, y) {
+    // //     const i = (y * 256 + x) * 4;
+    // //     const [r, g, b] = imageData.data.slice(i, i + 3);
+    // //     return (r * 256 + g + b / 256) - 32768;
+    // //   }
 
-      const h00 = getElevationAt(x0, y0);
-      const h10 = getElevationAt(x1, y0);
-      const h01 = getElevationAt(x0, y1);
-      const h11 = getElevationAt(x1, y1);
+    // //   const h00 = getElevationAt(x0, y0);
+    // //   const h10 = getElevationAt(x1, y0);
+    // //   const h01 = getElevationAt(x0, y1);
+    // //   const h11 = getElevationAt(x1, y1);
 
-      const h0 = h00 * (1 - fx) + h10 * fx;
-      const h1 = h01 * (1 - fx) + h11 * fx;
-      return h0 * (1 - fy) + h1 * fy;
-    }
+    // //   const h0 = h00 * (1 - fx) + h10 * fx;
+    // //   const h1 = h01 * (1 - fx) + h11 * fx;
+    // //   return h0 * (1 - fy) + h1 * fy;
+    // // }
 
-    (async () => {
-      await generateTerrainMesh();
-      await fetchOSMFeatures();
+    // (async () => {
+    //   // await generateTerrainMesh();
+    //   await fetchOSMFeatures();
 
-      // Terrainhöhen-Anpassung der Kamera mit Interpolation
-      const cam = document.getElementById('cameraRig');
-      const updateCamHeight = async () => {
-        const pos = cam.object3D.position;
-        const lat = CENTER_LAT + pos.z / 111000;
-        const lon = CENTER_LON + pos.x / (111000 * Math.cos(CENTER_LAT * Math.PI / 180));
-        const elev = await getInterpolatedElevation(lat, lon);
-        cam.setAttribute('position', `${pos.x} ${elev + 1.6} ${pos.z}`);
-      };
-      setInterval(updateCamHeight, 200);
-    })();
+    //   // Terrainhöhen-Anpassung der Kamera mit Interpolation
+    //   // const cam = document.getElementById('cameraRig');
+    //   // const updateCamHeight = async () => {
+    //   //   const pos = cam.object3D.position;
+    //   //   const lat = CENTER_LAT + pos.z / 111000;
+    //   //   const lon = CENTER_LON + pos.x / (111000 * Math.cos(CENTER_LAT * Math.PI / 180));
+    //   //   const elev = await getInterpolatedElevation(lat, lon);
+    //   //   cam.setAttribute('position', `${pos.x} ${elev + 1.6} ${pos.z}`);
+    //   // };
+    //   // setInterval(updateCamHeight, 200);
+    // })();
   </script>
 </body>
 </html>
